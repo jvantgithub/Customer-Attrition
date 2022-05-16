@@ -1,0 +1,521 @@
+---
+title: "Predict Attrition in Credit Customers"
+author: "Jacques Anthony MS, University of Nebraska Omaha"
+output:
+  
+  pdf_document: 
+linestretch: 2
+fontsize: 12
+---
+<style>
+p.caption {
+  font-size: 0.6em;
+}
+</style>
+\newpage
+
+## Abstract
+Attrition is a major concern for most banks because it means a reduction in the number of customers. Attrition can be caused by several factors such as market conditions, bad customer service, or bad targeting. It has been estimated that most banks have an attrition rate of around 11%. The goal of this paper is to predict attrition for credit customers using customer attributes such as attrition flag (existing and attrited customers), age, gender, credit limit, average card utilization and many more. Logistic regression and random forests, two machine learning algorithms, were applied to create models for attrition prediction. Our dataset consists of 84% of existing customers and 16% of attrited customers. Before building the machine learning models we looked at existing studies on customer attrition, data description, customer demographics, data preparation and analysis, and feature selection. A model comparison was performed to determine the best model. The Random Forests model outperformed the logistic regression model in terms of accuracy (83% vs 93%).
+
+\newpage
+## Introduction
+For a bank the term "attrition in customers" refers to the reduction of
+the number of customers. It is a major concern for most banks that can
+be caused by several factors such as market conditions, bad customer
+service, or bad targeting. The annual attrition rate on new customers is
+between 20 and 25% during their first year while attrition on all
+customers regardless of their tenure at the bank is around 11%.[1]
+Retaining an existing customer is five times less expensive than
+acquiring a new customer that's why customer retention is a priority for
+any business that want to survive and prosper. How can the bank or the
+business identify customers that are likely to leave? A suggested
+approach is to build models that identify an existing customer that
+may leave in the future.
+\newline The rest of this project is as follows. The following section discusses existing work addressing customer attrition followed by data description where each customer attribute in the data is explained. Next we  focus on customer demographics with the goal to spot any differences between existing and attrited customers. The data was prepared for analysis by removing duplicate rows, if any, and outliers. Feature selection was performed with the lasso regression to select the best subset of predictors for our models. We  applied two machine learning algorithms: the logistic regression and the random forests on our data and finally compared the two models to choose the best one.
+
+## Related Work
+
+There were multiple studies addressing customer attrition in the banking
+industry. Carlos Alvaro Rico-Poveda and Ixent Galpin in "Forecasting
+Credit Card Attrition using Machine Learning Models" [2] performed a
+study on 220,000 customers at a bank in Bogota, Columbia that was losing
+its credit card customers. It was found that the variable "age" was a
+discriminatory variable, customers with long tenure at the bank tend not
+to leave the bank, and participation in the banking market is the same
+for male and female customers. The authors used four models (LightGBM,
+XGBoost, Random Forest and Logistic Regression) to predict customer
+attrition. LightGBM was chosen as the best model since it was the one
+that performed best in the experiments conducted.
+\newline Similarly Benlan Hea, Yong Shi, Qian Wan , and Xi Zhao used a support
+vector machine (SVM) model [3] to predict customer attrition for
+commercial banks in China. The authors had an imbalanced data set
+because of the low proportion of attrited customers in their data. The
+study was performed on 50,000 bank customers. Linear SVM, SVM with
+radial kernel, and logistic regression were the three selected methods.
+SVM with radial kernel was chosen as the best model with an accuracy of
+98.95%, a precision rate of 39.10%, and a recall rate of 26.84%.
+
+## Data Description
+The data for this project was collected on
+<https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers>. It
+was provided by a bank manager who is worried about customers leaving
+the bank credit card services. The goal for this project is to identify
+patterns in the data and build machine learning models that 
+increase customer retention. The dataset "Credit Card customers"
+consists of 10127 customers with 23 different attributes (17 continuous
+variables and 6 discrete variables) such as attrition flag (existing and
+attrited customers), age, gender, credit limit, utilization, and many
+more. Table 1 shows each customer attribute along with its description.
+
+```{r echo=FALSE, cache=TRUE}
+setwd("~/Credit Card Customers")
+library(readxl)
+library(tinytex)
+library(knitr)
+mydata = read.csv("BankChurners.csv",stringsAsFactors = F)
+feat <- read_xlsx("Feature Description.xlsx")
+knitr::kable(feat, caption = "Customer Attributes with Description")
+```
+
+## Customer Demographics
+For this section we took a closer look at the customer attributes
+in the data. There are 23 attributes with 17 continuous variables and 6
+discrete variables. The provider of the data suggested we delete the
+Naive Bayes classifier columns. After removing those columns we had 15 continuous variables and 6 discrete variables. We started off with our response variable, Attrition flag.
+```{r, echo=FALSE, fig.align = 'center', fig.height = 2, fig.width=3,fig.cap= "Proportions of Existing and Attrited Customers with 8500 existing customers and 1627 for attrited customers", out.width="33%", cache=TRUE }
+mydata = mydata[,-c(22,23)]
+library(ggplot2)
+ggplot(mydata) + aes(Attrition_Flag) + geom_bar() + xlab("Attrition Flag")
+```
+
+From Figure 1 there are 8500 existing customers (84%) and 1627 attrited
+customers (16%). Our data is very unbalanced because the majority of our
+customers are existing customers. Next step is to look at the
+distribution of all the discrete variables. Looking at Figure 2 we can
+conclude that there are more female customers than male customers, most
+customers have a blue card, there are about 3500 customers making less than
+$40K a year, and a little over 3000 customers have a graduate level
+education.
+
+```{r ,echo=FALSE, fig.align='center', fig.cap= "Frequencies of different classes contained within each categorical variable", fig.height=4, fig.width = 9, cache=TRUE}
+library(DataExplorer)
+plot_bar(mydata)
+```
+
+Our dataset contains 15 continuous variables such as credit limit, total transaction counts, average utilization ratio, months inactive in the last 12 months, and many more. We looked at the difference between existing and attrited customers for the 4 continuous variables mentioned above. Figure 3 displays the credit limit by customers, the total transaction counts, the average utilization, and the months of inactivity in the last 12 months respectively. On average existing customers have higher credit limit, higher total transaction counts, and higher utilization than attrited customers. On the other hand, attrited customers on average are more inactive in the last 12 months compared to existing customers.
+
+```{r, echo=FALSE, figures-side, fig.show="hold", out.width="50%", fig.cap= "Credit Limit, Transaction Counts, Average Utilization Ratio, and Months of Inactivity in the last 12 months for Attrited and Existing Customers", fig.height=1.5, cache=TRUE, fig.width=2.9, fig.align='center'}
+
+trio = mydata[,c("Attrition_Flag","Credit_Limit","Total_Trans_Ct","Avg_Utilization_Ratio","Months_Inactive_12_mon")]
+ggplot(data=trio, mapping=aes(x=Attrition_Flag, y=Credit_Limit), size =2)+geom_boxplot() 
+
+ggplot(data=trio, mapping=aes(x=Attrition_Flag, y=Total_Trans_Ct), size =2)+geom_boxplot()  + ylab("Transaction Counts")
+
+ggplot(data=trio, mapping=aes(x=Attrition_Flag,y=Avg_Utilization_Ratio), size =2)+geom_boxplot() + ylab("Average Utilization")
+
+ggplot(data=trio, mapping=aes(x=Attrition_Flag,y=Months_Inactive_12_mon), size =2)+geom_boxplot() + ylab("Months Inactive")
+```
+
+
+## Data Preparation and Analysis
+In this section we checked for duplicate rows, normalized our data, removed outliers if any, and computed a correlation plot . There are 21 columns in the dataset with no missing values. We deleted the variable "CLIENTNUM" because it's a unique identifier and therefore it will not be needed for modeling. We checked for duplicate entries in our data so we can remove them. There were no duplicate rows in our data. We had to normalize our data because of the algorithm we chose and also to avoid large scale features to dominate the small scale features and produce wrong predictions. Logistic regression is a machine learning algorithm that computes the distance between the data points so it's imperative that feature scaling or normalization is done before using it. To normalize our data we used the min-max scaling function which will have values of each numerical variable in the data scaled between 0 and 1. After scaling our data we didn't spot any outliers which are [4] objects deviating from the major distribution of the data set; in other words: being an outlier means not being in or close to a cluster. Finally we computed a correlation plot to spot highly correlated variables.
+
+```{r include=FALSE, cache=TRUE}
+library(dplyr)
+mydata = mydata[,-1]
+mydata = distinct(mydata)
+```
+
+```{r include=FALSE, cache=TRUE}
+library(caret)
+predata <- preProcess(mydata[,-c(1,3,5,6,7,8)],method = c("range"))
+ndata <- predict(predata,mydata[,-c(1,3,5,6,7,8)])
+mydatanorm <- cbind(ndata,mydata[,c(1,3,5,6,7,8)])
+mydatanorm[sapply(mydatanorm, is.character)] <- lapply(mydatanorm[
+  sapply(mydatanorm, is.character)], as.factor)
+```
+
+```{r ,echo = FALSE, fig.align='center', fig.cap='Correlation Plot for Numerical Variables showing strong correlation (score=1) between Credit Limit and Average Open to Buy', fig.height=10, fig.width=8, cache=TRUE}
+library(DataExplorer)
+plot_correlation(mydatanorm, type = "c")
+```
+
+From Figure 4, we can see that the variables credit limit and average open to buy are highly correlated (score = 1), the other correlated variables are total transaction amount and total transaction counts with a correlation score of 0.81, months on book and customer age with a correlation score of 0.75, and finally average utilization ratio and total revolving balance with a score of 0.62. For the two most correlated variables: credit limit and average open to buy, we computed a correlation plot. Figure 5 shows a straight line which is an indicator for strong correlation.
+
+```{r echo=FALSE,cache=TRUE, fig.cap="Correlation Plot between credit limit and average open to buy. It indicates a strong correlation (score=1) because of the straight line", fig.height = 2, fig.width=2, fig.align='center',}
+ggplot(data = mydatanorm, aes(x = Credit_Limit, y = Avg_Open_To_Buy)) +
+    geom_point() + labs(x="Credit Limit", y="Average Open to Buy")
+
+```
+
+## Feature Selection
+Including all the variables in a model will lead to unnecessary
+complexity in the resulting model. That's why we need a mechanism to select a subset of predictors, remove redundant variables, and make our model easy to interpret. The lasso [5] is a shrinkage method that reduces
+the coefficient estimates of unnecessary variables to zero in order to
+find the best subset of variables for the model. LASSO regression [6]
+aims to identify the variables and corresponding regression coefficients
+that lead to a model that minimizes the prediction error. [7] There are many advantages in using LASSO method, first of all it can provide a very good prediction accuracy, because shrinking and removing the coefficients can reduce variance without a substantial increase of the bias. The results of the lasso regression can be seen in Table 2:
+
+```{r include = FALSE, cache=TRUE}
+library(glmnet)
+y <- mydatanorm$Attrition_Flag
+x <- data.matrix(mydatanorm[, -15])
+#perform k-fold cross-validation to find optimal lambda value
+cv_model <- cv.glmnet(x, y, alpha = 1, family = 'binomial', nlambda = 100)
+#find optimal lambda value that minimizes test MSE
+best_lambda <- cv_model$lambda.min
+##plot(cv_model)
+#find coefficients of best model
+best_model <- glmnet(x, y, alpha = 1, family = 'binomial',lambda = best_lambda)
+coef(best_model)
+```
+
+```{r, echo=FALSE, cache=TRUE}
+library(caret)
+library(knitr)
+lasso = varImp(best_model, lambda = best_lambda)
+colnames(lasso) <- "Lasso Coefficients"
+lasso$`Lasso Coefficients` = round(lasso$`Lasso Coefficients`,2)
+kable(lasso, caption = "Lasso Coefficients for each variable. It shows that Average Open to Buy and Income have a coefficient of zero.")
+```
+
+The lasso regression excluded the variables Average Open to Buy and
+Income Category from the list of predictors by shrinking their coefficients to zero. Going back to Figure 4 we can see that we still have highly correlated variables in our data. Using the lasso coefficients we dropped the correlated variables with the lowest predictive power. The variables dropped are total transaction amount, customer age, and average utilization ratio. 
+
+```{r include = FALSE, cache=TRUE}
+mydatafinal <- mydatanorm[,-c(1,9,11,14,19)]
+```
+
+
+## Modeling
+Machine learning techniques [2] are data approaches based on prediction
+and the construction of analytical models, with the aim of identifying
+patterns that can reduce the risk of leakage and have reliable results.
+This project was conducted in R Studio version 4.1.3. Some of the
+libraries used in this paper include knitr,dplyr, ggplot2, glmnet, caret, smotefamily, and randomForest. we split our final dataset
+with the selected predictors into training and test data. Our data is very imbalanced (84% of existing customers and 16% attrited customers) so we need to do some oversampling by increasing the number of attrited customers in the training set. SMOTE (Synthetic Minority Oversampling Technique) [8] uses completely different method to over-sample the minority class, which operates on the feature space rather than data space. Basically, SMOTE was designed to deal with continuous variables so we lost our discrete variables in our training set. We looked at two different machine learning algorithms: logistic regression and Random forests. We chose the logistic regression because our response variable (Attrition Flag) is a binary variable. Random Forest was selected because it is a very popular machine learning algorithm that can handle both regression and classification tasks. 
+
+```{r include = FALSE, cache=TRUE}
+library(caTools)
+set.seed(99)
+split = sample.split(mydatafinal$Attrition_Flag, SplitRatio = 0.8)
+train = subset(mydatafinal, split == TRUE)
+test = subset(mydatafinal, split == FALSE)
+#train$Attrition_Flag = ifelse(train$Attrition_Flag == "Existing Customer",1,0)
+#train$Attrition_Flag = as.factor(train$Attrition_Flag)
+```
+
+```{r include = FALSE, cache=TRUE}
+library(smotefamily)
+set.seed(123)
+smote_result = SMOTE(X = train[, -c(11:15)], target = train$Attrition_Flag, K = 5, dup_size = 0)
+train_oversampled = smote_result$data
+colnames(train_oversampled)[11] = "Attrition_Flag"
+table(train_oversampled$Attrition_Flag)
+prop.table(table(train_oversampled$Attrition_Flag))
+train_oversampled$Attrition_Flag = as.factor(train_oversampled$Attrition_Flag)
+
+```
+
+
+### Logistic Regression
+The logistic regression is a machine learning technique that [5] models the
+probability of a response variable to a particular category. The
+values of the probability are between 0 and 1. The response variable
+is a categorical with a binary outcome. The logistic regression or logit
+model belongs to a family of generalized linear models. Let $Y_i$ denotes the response variable (attrition flag),
+$Y_i = 0$ if it is attrited customer  and  $Y_i = 1$ if it is existing customer. Let $\pi = E(Y)$ denotes the expected value of Y. We fit the  logistic regression model as follows   $$G(\pi) = \beta_0 + \beta_1X $$  where G(.) is a logistic function given by 
+$$
+G(t) = log(t)- log(1-t)
+$$
+and X is the covariate matrix, $\beta_0$ is the intercept and $\beta_1$ is the slope vector. We fitted the logistic regression to our data and the results are as follows:
+
+```{r, echo=FALSE, cache=TRUE, warning=FALSE , fig.align='center', fig.height=5, fig.width=4, message=FALSE, fig.cap="The plot of attrition flag vs total transaction counts demonstrates a logistic regression can be fitted to the data. The blue curve shows the smooth line fitted to the data"}
+library(dplyr)
+library(ggplot2)
+train %>% mutate(prob = ifelse(Attrition_Flag == "Existing Customer",1,0)) %>% ggplot(aes(Total_Trans_Ct, prob)) + geom_point(alpha = 0.2) + geom_smooth(method = "glm", method.args = list(family = "binomial")) + labs( x = "Total Transaction Counts", y = "Attrition Flag")
+```
+\newpage
+Figure 6 shows that we fitted the logistic regression to the variable total transaction counts. Our affirmation that existing customers have higher total transaction counts than attrited customers still holds true. It should be noted that our y-axis denotes our customers (0 for attrited customers and 1 for existing customers). We applied the logistic regression to our data and the results are as follows:
+
+```{r include = FALSE,cache=TRUE}
+library(glmnet)
+set.seed(25)
+logmodel <- glm(Attrition_Flag~., data = train_oversampled, family = binomial)
+predlog <- predict(logmodel, test, type="response")
+contrasts(test$Attrition_Flag)
+predlogres <- ifelse(predlog > 0.5, 1, 0)
+table(predlogres, test$Attrition_Flag)
+```
+
+```{r, echo=FALSE, cache=TRUE}
+library(knitr)
+logsum = summary(logmodel)$coef
+lognew = as.data.frame(logsum)
+lognew[,-4] = round(lognew[,-4],2)
+lognew$`Pr(>|z|)` = round(lognew$`Pr(>|z|)`,4)
+kable(lognew, caption = "Variables coefficients from Logistic Regression. It shows that the variable total amount change Q4 over Q1 is insignificant.")
+```
+ 
+```{r, echo=FALSE, cache=TRUE}
+kable(table(predlogres, test$Attrition_Flag), caption = "Confusion Matrix for Logistic Regression")
+```
+Table 3 shows the coefficients of our logistic regression model.We can see that the variable total amount change Q4 over Q1 is not significant at all because of its high p-value (p=0.5513) . A confusion matrix is a table that is used to define the performance of a classification algorithm. It shows the number of correct and incorrect predictions made by the model. From Table 4 we can see that our model correctly predicted 1430 existing customers and 260 attrited customers from the test set. We can compute the accuracy, precision (proportion of positive identifications that was correct), and recall (proportion of actual positives identified correctly) for our attrited customers. By computing the numbers we get an accuracy of 83%, a precision of 80%, and a recall of 49%.
+
+### Random Forests
+
+Random Forests are a very popular machine learning algorithm that use
+weaker trees and turn them into a strong predictor. Unlike the logistic
+regression that can only be used for classification problems, random
+forests can be used for both classification and regression tasks. A random
+forest (RF) [9] classifier is an ensemble classifier that produces
+multiple decision trees, using a randomly selected subset of training
+samples and variables. Having a model with low variance it's ideal in
+prediction so random forest lead to low variance [5] by forcing each
+split in the tree to consider only a subset of predictors. We applied
+random forests to our data and the results are as follows:
+
+```{r include = FALSE, cache=TRUE}
+memory.limit(35000)
+library(randomForest)
+set.seed(25)
+rfmodel <- randomForest(Attrition_Flag ~., data = train_oversampled, importance = TRUE, proximity = TRUE, ntree = 10)
+predrf <- predict(rfmodel,test)
+```
+
+From Table 5 we can attest that our Random Forest correctly predicted 253 attrited customers and 1627 existing customers from the test. We computed the accuracy, precision and recall for the attrited customers using our the Random Forests model. We had 93% for accuracy, and 78% for precision and recall. The Random Forests model outperformed the logistic regression in terms of accuracy and recall. 
+
+## Model Comparison
+
+We used the same training and test data for the logistic regression and
+the Random Forests. Both machine learning algorithms performed well on
+the data with accuracy of 83% and 93% for the logistic regression and
+the Random Forests respectively. Random Forest works very well on huge
+datasets and because of its implicit features, it does not require much
+input preparation. We picked the Random Forests not only because of
+accuracy but also because they capture the variance of several input
+variables at the same time and enables the high number of observations
+to participate in the prediction. Furthermore, the precision and the
+recall of our random forests model are higher than the logistic
+regression model. Table 6 shows the comparison between the two models:
+
+```{r echo=FALSE}
+library(readxl)
+library(knitr)
+result <- read_excel("Comparison Table.xlsx", na = "")
+knitr::kable(result, caption = "This table indicates that Random Forest is a better model")
+```
+
+## Conclusion
+
+Attrition is hard to predict because there could be internal as well as
+external factors that can influence a customer decision to leave a bank.
+For this project we had a very imbalanced dataset with 84% of existing customers and 16% of attrited customers so we had to oversample our training data to account for more attrited customers using SMOTE. We went through the entire machine learning process (data collection, exploratory data analysis, data cleaning, feature selection, and modeling with machine learning algorithms) and we selected the logistic regression and the Random Forests algorithms.  The Random Forests gave us better results than the logistic regression in terms of accuracy and recall, the logistic regression had a slightly higher precision. We chose Random Forests because of the low bias and variance (error rate = 7%). Future work will include more machine learning algorithms like SVM and Xgboost to have a larger pool of models to choose from.
+
+\newpage
+
+## References
+
+[1] Fan Li, Juan Lei, Ying Tian, Sakuna Punyapatthanakul and Yanbo J.
+Wang. Model Selection Strategy for Customer Attrition Risk Prediction in
+Retail Banking.
+
+[2] Carlos Alvaro Rico-Poveda, Ixent Galpin, Forecasting Credit Card
+Attrition using Machine Learning Models.
+
+[3] Benlan Hea, Yong Shi, Qian Wan , and Xi Zhao, Prediction of customer
+attrition of commercial banks based on SVM model.
+
+[4] Breunig, M.M., Kriegel, HP., Ng, R.T., Sander, J. (1999). OPTICS-OF:
+Identifying Local Outliers. In: Żytkow, J.M., Rauch, J. (eds) Principles
+of Data Mining and Knowledge Discovery. PKDD 1999. Lecture Notes in
+Computer Science(), vol 1704. Springer, Berlin, Heidelberg.
+<https://doi.org/10.1007/978-3-540-48247-5_28>
+
+[5] An Introduction to Statistical Learning by Gareth James, Daniela
+Witten, Trevor Hastie, Robert Tibshirani
+
+[6] J Ranstam, J A Cook, LASSO regression. British Journal of Surgery,
+Volume 105, Issue 10, September 2018, Page 1348,
+<https://doi.org/10.1002/bjs.10895>
+
+[7] Fonti, Valeria, and Eduard Belitser. "Feature selection using lasso." VU Amsterdam research paper in business analytics 30 (2017): 1-25.
+
+[8] Tianxiang Gao. Hybrid classification approach of SMOTE and instance selection for imbalanced datasets
+
+[9] Mariana Belgiu, Lucian Dragut, Random forest in remote sensing: A
+review of applications and future directions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
